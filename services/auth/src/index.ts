@@ -21,6 +21,7 @@ async function initialize() {
     // 2️⃣ Create users table
     await sql`
       CREATE TABLE IF NOT EXISTS users (
+        name VARCHAR(255) NOT NULL,
         user_id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
@@ -53,9 +54,10 @@ async function initialize() {
       );
     `;
 
-    console.log("✅ Database initialized successfully");
+    console.log(" Database initialized successfully");
+    
   } catch (error) {
-    console.error("❌ Database initialization failed:", error);
+    console.error(" Database initialization failed:", error);
     process.exit(1);
   }
 }
