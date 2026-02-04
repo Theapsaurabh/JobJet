@@ -1,12 +1,28 @@
 import app from "./app.js";
 import dotenv from "dotenv";
 import { sql } from "./utils/db.js";
+import {createClient} from "redis"
+import { error } from "node:console";
 
 dotenv.config();
+export const redisClient= createClient({
+  url:process.env.Redis_url as string,
+
+});
+
+redisClient.connect()
+  .then(() => {
+    console.log("Connected to Redis");
+  })
+  .catch((error) => {
+    console.error("Redis connection failed:", error);
+  });
+
+
 
 async function initialize() {
   try {
-    // 1️⃣ Create enum safely
+    // 1️ Create enum safely
     await sql`
       DO $$
       BEGIN

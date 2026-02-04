@@ -14,33 +14,51 @@ export const startSendMailConsumer = async () => {
     console.log(" Mail Service consumer started, litening for sending mail");
 
     await consumer.run({
-      eachMessage: async ({ topic, partition, message }) => {
-        try {
-          const { to, subject, html } = JSON.parse(
-            message.value!.toString() || "{}",
-          );
-          const tranporter = nodemailer.createTransport({
-            host: "smtp.gmail.com",
-            port: 465,
-            secure: true,
-            auth: {
-              user: "xyz",
-              pass: "app password",
-            },
-          });
-          await tranporter.sendMail({
-            from: '"JobJet 👻" <no-reply@jobjet.com>',
-            to,
-            subject,
-            html,
-          });
-          console.log(`Mail has been send to ${to}`);
-        } catch (error) {
-            console.log("Error in sending mail:", error);
+  eachMessage: async ({ message }) => {
+    try {
+      if (!message.value) return;
 
+      //  Parse Kafka message
+      const parsed = JSON.parse(message.value.toString());
+
+      //  Always work with array
+      const mails = Array.isArray(parsed) ? parsed : [parsed];
+
+      //  Create transporter ONCE per batch
+      const transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: {
+          user: process.env.MAIL_USER, 
+          pass: process.env.MAIL_PASS, 
+        },
+      });
+
+      for (const mail of mails) {
+        const { to, subject, html } = mail;
+
+        //  Validation
+        if (!to || !subject || !html) {
+          console.error("❌ Invalid mail payload:", mail);
+          continue;
         }
-      },
-    });
+
+        await transporter.sendMail({
+          from: '"JobJet 👻" <no-reply@jobjet.com>',
+          to,
+          subject,
+          html,
+        });
+
+        console.log(`✅ Mail sent to ${to}`);
+      }
+    } catch (error) {
+      console.error("❌ Error in sending mail:", error);
+    }
+  },
+});
+
   } catch (error) {
     console.log("Error in Mail Service consumer:", error);
   }
