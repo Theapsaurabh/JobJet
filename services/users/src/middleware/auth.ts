@@ -1,7 +1,8 @@
 import type { NextFunction, Request, Response } from "express";
 import jwt, { type JwtPayload } from "jsonwebtoken";
+import { sql } from "../utils/db.js";
 
-interface User {
+export interface AuthUser {
   user_id: number;
   name: string;
   email: string;
@@ -10,43 +11,95 @@ interface User {
   bio: string | null;
   resume: string | null;
   resume_public_id: string | null;
-  profile_pic: string | null;
-  profile_pic_public_id: string | null;
+  profile_picture: string | null;
+  profile_picture_public_id: string | null;
   skills: string[];
   subscription: string | null;
 }
+
+export interface AuthenticatedRequest extends Request{
+  user?:AuthUser
+}
+
 export const isAuth = async (
-  req: Request,
+  req: AuthenticatedRequest ,
   res: Response,
   next: NextFunction,
 ): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
+
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       res.status(401).json({
-        message: "Authorization headers is missing or Invalid",
+        message: "Authorization header missing or invalid",
       });
       return;
     }
 
     const token = authHeader.split(" ")[1];
-    const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) {
+
+    if (!token) {
+      res.status(401).json({
+        message: "Authorization token missing",
+      });
+      return;
+    }
+
+    if (!process.env.JWT_SECRET) {
       res.status(500).json({
         message: "JWT_SECRET is not configured",
       });
       return;
     }
-    const decodedPayload = jwt.verify(token as string, jwtSecret) as JwtPayload;
-    if(!decodedPayload || !decodedPayload.id){
-        res.status(401).json({
-            message:"Authorization header is missing or Invalid",
-        });
-        return;
+
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET,
+    ) as JwtPayload;
+
+    if (!decoded || !decoded.id) {
+      res.status(401).json({ message: "Invalid token" });
+      return;
     }
-    
 
+    const users = await sql`
+      SELECT
+        u.user_id,
+        u.name,
+        u.email,
+        u.phone_number,
+        u.role,
+        u.bio,
+        u.resume,
+        u.resume_public_id,
+        u.profile_picture,
+        u.profile_picture_public_id,
+        u.subscription,
+        COALESCE(
+          ARRAY_AGG(s.skill_name) FILTER (WHERE s.skill_name IS NOT NULL),
+          '{}'
+        ) AS skills
+      FROM users u
+      LEFT JOIN user_skills us ON u.user_id = us.user_id
+      LEFT JOIN skills s ON us.skill_id = s.skill_id
+      WHERE u.user_id = ${decoded.id}
+      GROUP BY u.user_id;
+    `;
 
+    if (users.length === 0) {
+      res.status(401).json({ message: "User associated with this token no longer exists." });
+      return;
+    }
 
-  } catch (error) {}
+    //  attach user to request
+    req.user = users[0] as AuthUser;
+    req.user.skills = req.user.skills || [];
+
+    next(); 
+  } catch (error) {
+    console.error("Auth middleware error:", error);
+    res.status(401).json({
+      message: "Authentication failed, Please login again",
+    });
+  }
 };
