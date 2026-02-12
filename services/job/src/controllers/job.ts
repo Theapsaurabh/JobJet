@@ -1,0 +1,223 @@
+import axios from "axios";
+import type { AuthenticatedRequest } from "../middleware/auth.js";
+import getBuffer from "../utils/buffer.js";
+import { sql } from "../utils/db.js";
+import ErrorHandler from "../utils/errorHandler.js";
+import { tryCatch } from "../utils/TryCatch.js";
+
+export const createCompany = tryCatch(
+  async (req: AuthenticatedRequest, res) => {
+    const user = req.user;
+    if (!user) {
+      throw new ErrorHandler("Authentication required", 401);
+    }
+
+    if (user.role !== "recruiter") {
+      throw new ErrorHandler(
+        "Forbidden: Only recuriter can create Company",
+        403,
+      );
+    }
+    const { name, description, website } = req.body;
+    if (!name || !description || !website) {
+      throw new ErrorHandler("All the fields requires", 400);
+    }
+    const existingCompany = await sql`SELECT company_id FROM companies WHERE 
+name= ${name}
+
+ `;
+    if (existingCompany.length > 0) {
+      throw new ErrorHandler("A company with same name already exists:", 409);
+    }
+    const file = req.file;
+    if (!file) {
+      throw new ErrorHandler("Company Logo is required", 400);
+    }
+    const fileBuffer = getBuffer(file);
+    if (!fileBuffer || fileBuffer.length === 0) {
+      throw new ErrorHandler("Failed to generate buffer", 500);
+    }
+    const { data } = await axios.post(
+      `${process.env.UPLOAD_SERVICE}/api/utils/upload`,
+      { buffet: fileBuffer },
+    );
+    const [newCompany] = await sql`
+    INSERT INTO companies (name, description, website, logo, logo_public_id, recruiter_id) 
+    VALUES (${name}, ${description}, ${website}, ${data.url}, ${data.public_id}, ${req.user?.user_id})
+    RETURNING *
+    
+    `;
+    res.json({
+      message: "Company Created successfully",
+      company: newCompany,
+    });
+  },
+);
+
+export const deleteCompany = tryCatch(
+  async (req: AuthenticatedRequest, res) => {
+    const user = req.user;
+    const { companyId } = req.params;
+    const [company] = await sql`
+    SELECT logo_public_id FROM companies WHERE company_id=${companyId}
+    AND recruiter_id=${user?.user_id}
+
+    `;
+    if (!company) {
+      throw new ErrorHandler(
+        "Company not found or you're not authorized to delete",
+        404,
+      );
+    }
+
+    await sql`
+DELETE FROM companies WHERE company_id= ${companyId}
+
+`;
+    res.json({
+      message: "Company and all assiciated jobs have been deleted",
+    });
+  },
+);
+
+export const createJob = tryCatch(async (req: AuthenticatedRequest, res) => {
+  const user = req.user;
+
+  if (!user) {
+    throw new ErrorHandler("Authentication required", 401);
+  }
+
+  if (user.role !== "recruiter") {
+    throw new ErrorHandler("Forbidden: Only recruiter can create job", 403);
+  }
+
+  const {
+    title,
+    description,
+    salary,
+    location,
+    role,
+    job_type,
+    work_location,
+    company_id,
+    openings,
+  } = req.body;
+
+  if (
+    !title ||
+    !description ||
+    !salary ||
+    !location ||
+    !role ||
+    !job_type ||
+    !work_location ||
+    !company_id ||
+    !openings
+  ) {
+    throw new ErrorHandler("All fields are required", 400);
+  }
+
+  const [company] = await sql`
+    SELECT company_id
+    FROM companies
+    WHERE company_id = ${company_id}
+      AND recruiter_id = ${user.user_id}
+  `;
+
+  if (!company) {
+    throw new ErrorHandler("Company not found or unauthorized", 404);
+  }
+
+  const [newJob] = await sql`
+    INSERT INTO jobs (
+      title,
+      description,
+      salary,
+      location,
+      role,
+      job_type,
+      work_location,
+      company_id,
+      posted_by_recruiter_id,
+      openings
+    )
+    VALUES (
+      ${title},
+      ${description},
+      ${salary},
+      ${location},
+      ${role},
+      ${job_type},
+      ${work_location},
+      ${company_id},
+      ${user.user_id},
+      ${openings}
+    )
+    RETURNING *;
+  `;
+
+  res.status(201).json({
+    message: "Job posted successfully",
+    job: newJob,
+  });
+});
+
+
+export const updateJob = tryCatch(async (req: AuthenticatedRequest, res) => {
+  const user = req.user;
+
+  if (!user) {
+    throw new ErrorHandler("Authentication required", 401);
+  }
+
+  if (user.role !== "recruiter") {
+    throw new ErrorHandler("Forbidden: Only recruiter can update job", 403);
+  }
+
+  const { jobId } = req.params;
+
+  const [existingJob] = await sql`
+    SELECT * FROM jobs WHERE job_id = ${jobId}
+  `;
+
+  if (!existingJob) {
+    throw new ErrorHandler("Job not found", 404);
+  }
+
+  if (existingJob.posted_by_recruiter_id !== user.user_id) {
+    throw new ErrorHandler("Forbidden: You are not allowed", 403);
+  }
+
+  const {
+    title,
+    description,
+    salary,
+    location,
+    role,
+    job_type,
+    work_location,
+    openings,
+    is_active
+  } = req.body;
+
+  const [updatedJob] = await sql`
+    UPDATE jobs SET
+      title = ${title ?? existingJob.title},
+      description = ${description ?? existingJob.description},
+      salary = ${salary ?? existingJob.salary},
+      location = ${location ?? existingJob.location},
+      role = ${role ?? existingJob.role},
+      job_type = ${job_type ?? existingJob.job_type},
+      work_location = ${work_location ?? existingJob.work_location},
+      openings = ${openings ?? existingJob.openings},
+      is_active = ${is_active ?? existingJob.is_active}
+    WHERE job_id = ${jobId}
+    RETURNING *;
+  `;
+
+  res.json({
+    message: "Job updated successfully",
+    job: updatedJob
+  });
+});
+
