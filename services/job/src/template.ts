@@ -1,0 +1,149 @@
+export const applicationStatusUpdateTemplate = (
+  jobTitle: string,
+  status: string
+) => {
+
+  const statusColor =
+    status === "Hired"
+      ? "#28a745"
+      : status === "Rejected"
+      ? "#dc3545"
+      : "#ffc107";
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Application Status Update</title>
+<style>
+body {
+margin: 0;
+padding: 0;
+font-family: Arial, sans-serif;
+background-color: #f4f4f4;
+}
+
+.email-wrapper {
+width: 100%;
+border-collapse: collapse;
+}
+
+.email-container {
+width: 600px;
+border-collapse: collapse;
+background-color: #ffffff;
+box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+border-radius: 8px;
+overflow: hidden;
+}
+
+.header {
+background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+padding: 40px 30px;
+text-align: center;
+}
+
+.header h1 {
+margin: 0;
+color: #ffffff;
+font-size: 28px;
+font-weight: 600;
+}
+
+.content {
+padding: 40px 30px;
+}
+
+.text {
+margin: 0 0 20px;
+color: #333333;
+font-size: 16px;
+line-height: 1.6;
+}
+
+.status-box {
+padding: 15px;
+margin: 20px 0;
+border-radius: 6px;
+background-color: ${statusColor}20;
+color: ${statusColor};
+font-weight: bold;
+text-align: center;
+font-size: 16px;
+}
+
+.footer {
+background-color: #f8f9fa;
+padding: 30px;
+text-align: center;
+border-top: 1px solid #e9ecef;
+}
+
+.footer-text {
+margin: 0 0 10px;
+color: #999999;
+font-size: 12px;
+}
+
+.footer-text:last-child {
+margin: 0;
+}
+</style>
+</head>
+
+<body>
+<table role="presentation" class="email-wrapper">
+<tr>
+<td align="center" style="padding: 40px 0;">
+<table role="presentation" class="email-container">
+
+<tr>
+<td class="header">
+<h1>Application Status Update</h1>
+</td>
+</tr>
+
+<tr>
+<td class="content">
+<p class="text">Hi there,</p>
+
+<p class="text">
+Your application for the position of
+<strong>${jobTitle}</strong> has been updated.
+</p>
+
+<div class="status-box">
+Status: ${status}
+</div>
+
+<p class="text">
+You can log in to your account to see more details.
+</p>
+
+<p class="text">
+Thank you for using HireHeaven!
+</p>
+</td>
+</tr>
+
+<tr>
+<td class="footer">
+<p class="footer-text">
+© 2026 HireHeaven. All rights reserved.
+</p>
+<p class="footer-text">
+This is an automated message. Please do not reply.
+</p>
+</td>
+</tr>
+
+</table>
+</td>
+</tr>
+</table>
+</body>
+</html>
+`;
+};

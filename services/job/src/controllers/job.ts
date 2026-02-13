@@ -4,6 +4,8 @@ import getBuffer from "../utils/buffer.js";
 import { sql } from "../utils/db.js";
 import ErrorHandler from "../utils/errorHandler.js";
 import { tryCatch } from "../utils/TryCatch.js";
+import { applicationStatusUpdateTemplate } from "../template.js";
+import { publishToTopic } from "../producer.js";
 
 export const createCompany = tryCatch(
   async (req: AuthenticatedRequest, res) => {
@@ -328,3 +330,123 @@ export const getSingleJob= tryCatch(
 
   }
 )
+
+export const getAllApplicationForJob = tryCatch(
+  async (req: AuthenticatedRequest, res) => {
+    const user = req.user;
+
+    if (!user) {
+      throw new ErrorHandler("Authentication required", 401);
+    }
+
+    if (user.role !== "recruiter") {
+      throw new ErrorHandler("Forbidden: Only recruiter can access this", 403);
+    }
+
+    //  extract only jobId
+    const jobId = Number(req.params.jobId);
+
+    if (isNaN(jobId)) {
+      throw new ErrorHandler("Invalid Job ID", 400);
+    }
+
+    const [job] = await sql`
+      SELECT posted_by_recruiter_id
+      FROM jobs
+      WHERE job_id = ${jobId}
+    `;
+
+    if (!job) {
+      throw new ErrorHandler("Job not found", 404);
+    }
+
+   
+    if (job.posted_by_recruiter_id !== user.user_id) {
+      throw new ErrorHandler("Forbidden: You are not allowed", 403);
+    }
+
+    const applications = await sql`
+      SELECT *
+      FROM applications
+      WHERE job_id = ${jobId}
+      ORDER BY subscribed DESC, applied_at ASC
+    `;
+
+    res.json({
+      count: applications.length,
+      applications
+    });
+  }
+);
+
+export const updateApplications = tryCatch(
+  async (req: AuthenticatedRequest, res) => {
+    const user = req.user;
+
+    if (!user) {
+      throw new ErrorHandler("Authentication required", 401);
+    }
+
+    if (user.role !== "recruiter") {
+      throw new ErrorHandler("Forbidden: Only recruiter can access this", 403);
+    }
+
+    const id = Number(req.params.id);
+
+    if (isNaN(id)) {
+      throw new ErrorHandler("Invalid application id", 400);
+    }
+
+    const { status } = req.body;
+
+    const allowedStatus = ["Submitted", "Rejected", "Hired"];
+
+    if (!status || !allowedStatus.includes(status)) {
+      throw new ErrorHandler("Invalid application status", 400);
+    }
+
+    const [application] = await sql`
+      SELECT * FROM applications 
+      WHERE application_id = ${id}
+    `;
+
+    if (!application) {
+      throw new ErrorHandler("Application not found", 404);
+    }
+
+    const [job] = await sql`
+      SELECT posted_by_recruiter_id, title 
+      FROM jobs 
+      WHERE job_id = ${application.job_id}
+    `;
+
+    if (!job) {
+      throw new ErrorHandler("Job not found", 404);
+    }
+
+    if (job.posted_by_recruiter_id !== user.user_id) {
+      throw new ErrorHandler("Forbidden: You are not allowed", 403);
+    }
+
+    const [updatedApplication] = await sql`
+      UPDATE applications 
+      SET status = ${status}
+      WHERE application_id = ${id}
+      RETURNING *;
+    `;
+
+    const message = {
+      to: application.applicant_email,
+      subject: "Application Status Updated",
+      html: applicationStatusUpdateTemplate(job.title, status),
+    };
+
+    // send as array (your mail service expects array)
+    await publishToTopic("send-mail", [message]);
+
+    res.json({
+      message: "Application updated successfully",
+      application: updatedApplication,
+    });
+  }
+);
