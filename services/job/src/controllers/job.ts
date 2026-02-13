@@ -162,7 +162,6 @@ export const createJob = tryCatch(async (req: AuthenticatedRequest, res) => {
   });
 });
 
-
 export const updateJob = tryCatch(async (req: AuthenticatedRequest, res) => {
   const user = req.user;
 
@@ -197,7 +196,7 @@ export const updateJob = tryCatch(async (req: AuthenticatedRequest, res) => {
     job_type,
     work_location,
     openings,
-    is_active
+    is_active,
   } = req.body;
 
   const [updatedJob] = await sql`
@@ -217,7 +216,115 @@ export const updateJob = tryCatch(async (req: AuthenticatedRequest, res) => {
 
   res.json({
     message: "Job updated successfully",
-    job: updatedJob
+    job: updatedJob,
   });
 });
 
+export const getAllCompany = tryCatch(
+  async (req: AuthenticatedRequest, res) => {
+    const companies = await sql`
+  SELECT * FROM companies WHERE recruiter_id= ${req.user?.user_id}
+
+  
+  `;
+    res.json({
+      companies,
+    });
+  },
+);
+
+export const getCompanyDetails = tryCatch(
+  async (req: AuthenticatedRequest, res) => {
+    const { id } = req.params;
+
+    if (!id) {
+      throw new ErrorHandler("Company id is required", 400);
+    }
+
+    const [companyData] = await sql`
+      SELECT 
+        c.*,
+        COALESCE(
+          (
+            SELECT json_agg(j.*)
+            FROM jobs j
+            WHERE j.company_id = c.company_id
+          ),
+          '[]'::json
+        ) AS jobs
+      FROM companies c
+      WHERE c.company_id = ${id};
+    `;
+
+    if (!companyData) {
+      throw new ErrorHandler("Company not found", 404);
+    }
+
+    res.json({
+      company: companyData,
+    });
+  },
+);
+
+export const getAllActiveJobs = tryCatch(
+  async (req, res) => {
+    const { title, location } = req.query as {
+      title?: string;
+      location?: string;
+    };
+
+    let queryString = `
+      SELECT 
+        j.job_id,
+        j.title,
+        j.description,
+        j.salary,
+        j.location,
+        j.job_type,
+        j.role,
+        j.work_location,
+        j.created_at,
+        c.name AS company_name,
+        c.logo AS company_logo,
+        c.company_id
+      FROM jobs j
+      JOIN companies c ON j.company_id = c.company_id
+      WHERE j.is_active = true
+    `;
+
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (title) {
+      queryString += ` AND j.title ILIKE $${paramIndex}`;
+      values.push(`%${title}%`);
+      paramIndex++;
+    }
+
+    if (location) {
+      queryString += ` AND j.location ILIKE $${paramIndex}`;
+      values.push(`%${location}%`);
+      paramIndex++;
+    }
+
+    queryString += ` ORDER BY j.created_at DESC`;
+
+    const jobs = await sql.query(queryString, values);
+
+    res.json({
+      count: jobs.length,
+      jobs
+    });
+  }
+);
+
+export const getSingleJob= tryCatch(
+  async(req, res)=>{
+    const [job]= await sql`
+    SELECT * FROM jobs WHERE job_id= ${req.params.jobId}`;
+    res.json({
+      job
+    })
+
+  }
+)

@@ -295,3 +295,118 @@ export const deleteSkillFromUser = tryCatch(
     });
   },
 );
+
+// apply for jobs
+export const applyForJob = tryCatch(
+  async (req: AuthenticatedRequest, res) => {
+    const user = req.user;
+
+    if (!user) {
+      throw new ErrorHandler("Authentication required", 401);
+    }
+
+    if (user.role !== "jobseeker") {
+      throw new ErrorHandler("Forbidden: Only jobseekers can apply", 403);
+    }
+
+    const { job_id } = req.body;
+
+    if (!job_id) {
+      throw new ErrorHandler("Job id is required", 400);
+    }
+
+    if (!user.resume) {
+      throw new ErrorHandler(
+        "You need to upload resume in profile before applying",
+        400
+      );
+    }
+
+    const [job] = await sql`
+      SELECT is_active FROM jobs WHERE job_id = ${job_id}
+    `;
+
+    if (!job) {
+      throw new ErrorHandler("Job not found", 404);
+    }
+
+    if (!job.is_active) {
+      throw new ErrorHandler("This job is no longer active", 400);
+    }
+
+    const now = Date.now();
+    const subscriptionTime = user.subscription
+      ? new Date(user.subscription).getTime()
+      : 0;
+
+    const isSubscribed = subscriptionTime > now;
+
+    let newApplication;
+
+    try {
+      [newApplication] = await sql`
+        INSERT INTO applications (
+          job_id,
+          applicant_id,
+          applicant_email,
+          resume,
+          subscribed
+        )
+        VALUES (
+          ${job_id},
+          ${user.user_id},
+          ${user.email},
+          ${user.resume},
+          ${isSubscribed}
+        )
+        RETURNING *;
+      `;
+    } catch (error: any) {
+      if (error.code === "23505") {
+        throw new ErrorHandler(
+          "You have already applied for this job",
+          409
+        );
+      }
+      throw error;
+    }
+
+    res.status(201).json({
+      message: "Applied successfully",
+      application: newApplication,
+    });
+  }
+);
+
+
+export const getAllApplications = tryCatch(
+  async (req: AuthenticatedRequest, res) => {
+    const user = req.user;
+
+    if (!user) {
+      throw new ErrorHandler("Authentication required", 401);
+    }
+
+    if (user.role !== "jobseeker") {
+      throw new ErrorHandler("Forbidden", 403);
+    }
+
+    const applications = await sql`
+      SELECT 
+        a.*,
+        j.title AS job_title,
+        j.salary AS job_salary,
+        j.location AS job_location,
+        j.company_id
+      FROM applications a
+      JOIN jobs j ON a.job_id = j.job_id
+      WHERE a.applicant_id = ${user.user_id}
+      ORDER BY a.applied_at DESC;
+    `;
+
+    res.json({
+      count: applications.length,
+      applications,
+    });
+  }
+);
