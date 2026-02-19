@@ -10,10 +10,13 @@ import { Button } from "./ui/button";
 
 const Hero = () => {
   return (
-    <section className="relative overflow-hidden bg-background">
-      {/* Background Gradient Glow */}
-      <div className="absolute inset-0 -z-10">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-blue-500/10 rounded-full blur-3xl"></div>
+    <section className="relative overflow-hidden bg-background w-full max-w-full">
+      
+      {/* Background Gradient Glow (FIXED) */}
+      <div className="absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 
+                        w-[600px] h-[600px] max-w-[90vw] 
+                        bg-blue-500/10 rounded-full blur-3xl" />
       </div>
 
       <div className="mx-auto max-w-7xl px-6 py-20 lg:py-28">
@@ -85,7 +88,7 @@ const Hero = () => {
           </div>
 
           {/* Right Image */}
-          <div className="relative">
+          <div className="relative w-full">
             <div className="relative rounded-3xl overflow-hidden border shadow-xl">
               <Image
                 src="/hero.jpeg"
@@ -97,6 +100,7 @@ const Hero = () => {
               />
             </div>
           </div>
+
         </div>
       </div>
     </section>

@@ -39,7 +39,7 @@ export const CareerGuide = () => {
     setLoading(true);
 
     try {
-      const { data } = await axios.post(utils_service, {
+      const { data } = await axios.post(`${utils_service}/career`, {
         skills: skills.join(", "),
         location,
         experienceLevel,
